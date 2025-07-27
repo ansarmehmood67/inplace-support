@@ -1,189 +1,261 @@
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
-import { LoadingSpinner, ProgressBar } from '@/components/ui/loading';
-import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, CloudUpload, FileText } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Progress } from '@/components/ui/progress';
+import { Upload, CheckCircle, AlertCircle, FileSpreadsheet, Wifi, WifiOff } from 'lucide-react';
+import { uploadFile } from '@/lib/api';
+import { toast } from 'sonner';
 
 export function UploadSection() {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [progress, setProgress] = useState(0);
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  // Network status monitoring
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
     if (selectedFile) {
+      if (selectedFile.size > 10 * 1024 * 1024) { // 10MB limit
+        toast.error('File size too large. Please select a file smaller than 10MB.');
+        return;
+      }
+      
+      const allowedTypes = [
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.ms-excel',
+        'text/csv'
+      ];
+      
+      if (!allowedTypes.includes(selectedFile.type)) {
+        toast.error('Invalid file type. Please select an Excel or CSV file.');
+        return;
+      }
+      
       setFile(selectedFile);
+      setAlert(null);
+      toast.success('File selected successfully!');
     }
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!file) return;
+    if (!file) {
+      toast.error('Please select a file to upload.');
+      return;
+    }
+
+    if (!isOnline) {
+      toast.error('No internet connection. Please check your network and try again.');
+      return;
+    }
 
     setUploading(true);
-    setUploadProgress(0);
+    setProgress(0);
+    setAlert(null);
 
-    // Simulate upload progress
+    // Simulate realistic upload progress
     const progressInterval = setInterval(() => {
-      setUploadProgress(prev => {
-        if (prev >= 90) {
+      setProgress(prev => {
+        if (prev >= 85) {
           clearInterval(progressInterval);
-          return 90;
+          return prev;
         }
         return prev + Math.random() * 15;
       });
-    }, 200);
+    }, 300);
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const response = await fetch('https://ba072026eae8.ngrok-free.app/upload/', {
-        method: 'POST',
-        headers: {
-          'ngrok-skip-browser-warning': 'true',
-        },
-        body: formData,
+      toast.loading('Uploading file...', { id: 'upload-toast' });
+      
+      const response = await uploadFile(file, (progress) => {
+        setProgress(progress);
       });
 
-      const result = await response.json();
       clearInterval(progressInterval);
-      setUploadProgress(100);
+      setProgress(100);
 
-      if (result.success) {
-        setAlert({
-          type: 'success',
-          message: `✅ Upload complete! ${result.added} new candidate${result.added !== 1 ? 's' : ''} added, ${result.skipped} record${result.skipped !== 1 ? 's' : ''} skipped.`
-        });
+      if (response.ok) {
+        const result = await response.json();
+        setAlert({ type: 'success', message: result.message || 'File uploaded successfully!' });
+        toast.success(result.message || 'File uploaded successfully!', { id: 'upload-toast' });
         setFile(null);
         // Reset file input
-        const fileInput = document.getElementById('file-input') as HTMLInputElement;
+        const fileInput = document.getElementById('file-upload') as HTMLInputElement;
         if (fileInput) fileInput.value = '';
       } else {
-        setAlert({
-          type: 'error',
-          message: '🚨 Upload failed, please try again.'
-        });
+        const errorData = await response.json().catch(() => ({ error: 'Upload failed' }));
+        const errorMessage = errorData.error || 'Upload failed. Please try again.';
+        setAlert({ type: 'error', message: errorMessage });
+        toast.error(errorMessage, { id: 'upload-toast' });
       }
     } catch (error) {
       clearInterval(progressInterval);
-      setAlert({
-        type: 'error',
-        message: '🚨 Upload failed, please try again.'
-      });
+      const errorMessage = error instanceof Error ? error.message : 'Network error. Please check your connection and try again.';
+      setAlert({ type: 'error', message: errorMessage });
+      toast.error(errorMessage, { id: 'upload-toast' });
     } finally {
       setUploading(false);
-      setUploadProgress(0);
-      // Auto-hide alert after 5 seconds
-      setTimeout(() => setAlert(null), 5000);
+      setTimeout(() => setProgress(0), 2000);
     }
   };
 
   return (
-    <div className="space-y-6 animate-slide-up">
-      <Card className="bg-gradient-secondary border-border shadow-floating hover-lift glass-effect">
-        <CardContent className="p-8">
-          <div className="flex items-center gap-6 mb-6 animate-scale-in">
-            <div className="relative">
-              <div className="absolute -inset-2 bg-gradient-primary rounded-xl opacity-20 blur-lg animate-pulse-glow" />
-              <div className="relative p-4 rounded-xl bg-gradient-primary shadow-glow">
-                <CloudUpload className="h-8 w-8 text-primary-foreground" />
-              </div>
-            </div>
-            <div>
-              <h3 className="text-2xl font-bold text-foreground">Upload Excel File</h3>
-              <p className="text-muted-foreground text-lg">Submit a new batch of candidates using an Excel file (.xls or .xlsx)</p>
-            </div>
-          </div>
+    <div className="space-y-8 animate-slide-up">
+      {/* Network Status Indicator */}
+      {!isOnline && (
+        <Alert className="border-2 border-red-500/20 bg-red-500/5 shadow-floating glass-effect animate-error-shake">
+          <WifiOff className="h-5 w-5 text-red-500" />
+          <AlertDescription className="text-red-700 font-medium">
+            No internet connection. Please check your network connection.
+          </AlertDescription>
+        </Alert>
+      )}
 
-          {alert && (
-            <Alert className={`mb-6 animate-slide-up ${
-              alert.type === 'success' 
-                ? 'border-success bg-success/10 shadow-glow' 
-                : 'border-destructive bg-destructive/10'
-            }`}>
-              <div className="flex items-center gap-3">
-                {alert.type === 'success' ? (
-                  <CheckCircle className="h-5 w-5 text-success animate-scale-in" />
-                ) : (
-                  <AlertCircle className="h-5 w-5 text-destructive animate-scale-in" />
-                )}
-                <AlertDescription className={`text-lg ${
-                  alert.type === 'success' ? 'text-success' : 'text-destructive'
-                }`}>
-                  {alert.message}
-                </AlertDescription>
-              </div>
-            </Alert>
-          )}
-
+      {/* Upload Card */}
+      <Card className="relative overflow-hidden border-border/50 bg-gradient-surface shadow-floating glass-effect hover-lift">
+        <div className="absolute inset-0 bg-gradient-accent opacity-5" />
+        <CardContent className="p-8 relative z-10">
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="flex flex-col lg:flex-row gap-6">
-              <div className="flex-1">
-                <Input
-                  id="file-input"
+            {/* File Input */}
+            <div className="relative group">
+              <div className={`border-2 border-dashed rounded-xl p-8 text-center transition-all duration-300 ${
+                file 
+                  ? 'border-primary bg-primary/5 shadow-glow' 
+                  : 'border-border hover:border-primary/50 hover:bg-primary/5'
+              } ${!isOnline ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                {file ? (
+                  <div className="flex items-center justify-center space-x-4 animate-scale-in">
+                    <div className="p-3 rounded-full bg-primary/10">
+                      <FileSpreadsheet className="h-8 w-8 text-primary animate-pulse" />
+                    </div>
+                    <div className="text-left">
+                      <h3 className="font-semibold text-foreground">{file.name}</h3>
+                      <p className="text-muted-foreground text-sm">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="animate-fade-in">
+                    <div className="p-4 rounded-full bg-gradient-primary mx-auto w-fit mb-4 shadow-glow animate-float">
+                      {isOnline ? (
+                        <Upload className="h-8 w-8 text-primary-foreground" />
+                      ) : (
+                        <WifiOff className="h-8 w-8 text-primary-foreground" />
+                      )}
+                    </div>
+                    <h3 className="text-xl font-semibold text-foreground mb-2">
+                      {isOnline ? 'Upload Excel File' : 'No Internet Connection'}
+                    </h3>
+                    <p className="text-muted-foreground mb-6">
+                      {isOnline 
+                        ? 'Choose an Excel file (.xlsx, .xls) or CSV file to upload candidate data'
+                        : 'Please check your internet connection to upload files'
+                      }
+                    </p>
+                  </div>
+                )}
+                
+                <input
+                  id="file-upload"
                   type="file"
-                  accept=".xlsx,.xls"
+                  accept=".xlsx,.xls,.csv"
                   onChange={handleFileChange}
-                  required
-                  className="file:border-0 file:bg-gradient-primary file:text-primary-foreground file:rounded-lg file:px-6 file:py-3 file:mr-4 file:shadow-card hover:file:shadow-glow file:transition-all file:duration-300 h-14 text-lg"
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  disabled={uploading || !isOnline}
+                  aria-label="Choose file to upload"
                 />
               </div>
+            </div>
+
+            {/* Upload Button */}
+            <div className="flex justify-center">
               <Button
                 type="submit"
+                disabled={!file || uploading || !isOnline}
+                size="lg"
                 variant="premium"
-                size="xl"
-                disabled={!file || uploading}
-                className="min-w-[160px] animate-pulse-glow"
+                className="px-8 py-3 rounded-xl shadow-glow hover-lift disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label={uploading ? 'Uploading file' : 'Upload selected file'}
               >
                 {uploading ? (
-                  <div className="flex items-center gap-3">
-                    <LoadingSpinner size="sm" />
+                  <div className="flex items-center space-x-3">
+                    <div className="w-5 h-5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
                     <span>Uploading...</span>
                   </div>
                 ) : (
-                  <>
-                    <Upload className="h-5 w-5" />
-                    Upload File
-                  </>
+                  <div className="flex items-center space-x-2">
+                    {isOnline ? (
+                      <Upload className="h-5 w-5" />
+                    ) : (
+                      <WifiOff className="h-5 w-5" />
+                    )}
+                    <span>{isOnline ? 'Upload File' : 'Offline'}</span>
+                  </div>
                 )}
               </Button>
             </div>
-
-            {uploading && uploadProgress > 0 && (
-              <div className="animate-slide-up">
-                <ProgressBar 
-                  progress={uploadProgress} 
-                  showPercentage 
-                  className="mb-2" 
-                />
-                <p className="text-sm text-muted-foreground text-center">
-                  Processing your file...
-                </p>
-              </div>
-            )}
           </form>
-
-          {file && !uploading && (
-            <div className="mt-6 p-4 rounded-xl bg-gradient-accent border border-primary/20 animate-scale-in">
-              <div className="flex items-center gap-3">
-                <FileText className="h-6 w-6 text-primary" />
-                <div>
-                  <p className="text-foreground font-medium">
-                    Ready to upload: {file.name}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Size: {(file.size / 1024 / 1024).toFixed(2)} MB
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
         </CardContent>
       </Card>
+
+      {/* Progress Bar */}
+      {uploading && (
+        <Card className="bg-gradient-surface border-border/50 shadow-floating glass-effect animate-scale-in">
+          <CardContent className="p-6">
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium text-foreground">Upload Progress</span>
+                <span className="text-sm text-muted-foreground">{Math.round(progress)}%</span>
+              </div>
+              <div className="relative overflow-hidden">
+                <Progress value={progress} className="h-3 bg-muted" />
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" 
+                     style={{ transform: 'translateX(-100%)', animation: 'shimmer 1.5s infinite' }} />
+              </div>
+              <p className="text-xs text-muted-foreground text-center">
+                Processing your file securely...
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Alert Messages */}
+      {alert && (
+        <Alert className={`border-2 shadow-floating glass-effect animate-scale-in ${
+          alert.type === 'success' 
+            ? 'border-emerald-500/20 bg-emerald-500/5' 
+            : 'border-red-500/20 bg-red-500/5 animate-error-shake'
+        }`}>
+          <div className="flex items-center space-x-3">
+            {alert.type === 'success' ? (
+              <CheckCircle className="h-5 w-5 text-emerald-500 animate-pulse" />
+            ) : (
+              <AlertCircle className="h-5 w-5 text-red-500 animate-pulse" />
+            )}
+            <AlertDescription className={`${
+              alert.type === 'success' ? 'text-emerald-700' : 'text-red-700'
+            } font-medium`}>
+              {alert.message}
+            </AlertDescription>
+          </div>
+        </Alert>
+      )}
     </div>
   );
 }
