@@ -7,6 +7,10 @@ import { MessageSquare, User, Bot, Shield, ExternalLink } from 'lucide-react';
 interface Candidate {
   name: string;
   phone_number: string;
+  status: string;
+  last_message: string;
+  last_sender: string;
+  last_updated: string;
 }
 
 interface ChatMessage {
@@ -23,10 +27,8 @@ export function AllChatsSection() {
 
   const loadAllChats = async () => {
     try {
-      const response = await fetch('https://ba072026eae8.ngrok-free.app/get_all_chats/', {
-        headers: { 'ngrok-skip-browser-warning': 'true' }
-      });
-      const data = await response.json();
+      const { getCandidates } = await import('@/lib/api');
+      const data = await getCandidates();
       setCandidates(data);
     } catch (error) {
       console.error('Failed to load all chats:', error);
@@ -45,10 +47,8 @@ export function AllChatsSection() {
 
   const fetchChat = async (phoneNumber: string) => {
     try {
-      const response = await fetch(`https://ba072026eae8.ngrok-free.app/get_chat_history/?phone=${phoneNumber}`, {
-        headers: { 'ngrok-skip-browser-warning': 'true' }
-      });
-      const data = await response.json();
+      const { getChatHistory } = await import('@/lib/api');
+      const data = await getChatHistory(phoneNumber);
       setChatHistory(data.history || []);
     } catch (error) {
       console.error('Failed to fetch chat:', error);

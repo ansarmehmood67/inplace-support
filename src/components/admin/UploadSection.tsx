@@ -90,17 +90,21 @@ export function UploadSection() {
       clearInterval(progressInterval);
       setProgress(100);
 
-      if (response.ok) {
-        const result = await response.json();
-        setAlert({ type: 'success', message: result.message || 'File uploaded successfully!' });
-        toast.success(result.message || 'File uploaded successfully!', { id: 'upload-toast' });
+      const data = await response.json();
+      
+      if (data.success) {
+        const message = `Upload successful! Added: ${data.added}, Skipped: ${data.skipped}, Failed: ${data.failed?.length || 0}`;
+        setAlert({
+          type: 'success',
+          message
+        });
+        toast.success(message, { id: 'upload-toast' });
         setFile(null);
         // Reset file input
         const fileInput = document.getElementById('file-upload') as HTMLInputElement;
         if (fileInput) fileInput.value = '';
       } else {
-        const errorData = await response.json().catch(() => ({ error: 'Upload failed' }));
-        const errorMessage = errorData.error || 'Upload failed. Please try again.';
+        const errorMessage = data.error || 'Upload failed. Please try again.';
         setAlert({ type: 'error', message: errorMessage });
         toast.error(errorMessage, { id: 'upload-toast' });
       }

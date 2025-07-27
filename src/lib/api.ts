@@ -109,8 +109,8 @@ export const uploadFile = async (file: File, onProgress?: (progress: number) => 
   });
 };
 
-export const getCandidates = async () => {
-  const response = await apiRequest('/get_all_candidates/');
+export const getAllChats = async () => {
+  const response = await apiRequest('/get_all_chats/');
   return response.json();
 };
 
@@ -119,7 +119,7 @@ export const getEscalated = async () => {
   return response.json();
 };
 
-export const getAllChats = async () => {
+export const getCandidates = async () => {
   const response = await apiRequest('/get_all_chats/');
   return response.json();
 };

@@ -8,6 +8,8 @@ interface Candidate {
   name: string;
   phone_number: string;
   status: string;
+  last_message: string;
+  last_sender: string;
   last_updated: string;
 }
 
