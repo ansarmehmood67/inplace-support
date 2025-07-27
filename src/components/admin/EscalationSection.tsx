@@ -25,7 +25,9 @@ export function EscalationSection() {
 
   const loadEscalations = async () => {
     try {
-      const response = await fetch('/get_escalated/');
+      const response = await fetch('https://ba072026eae8.ngrok-free.app/get_escalated/', {
+        headers: { 'ngrok-skip-browser-warning': 'true' }
+      });
       const data = await response.json();
       setCandidates(data);
     } catch (error) {
@@ -45,7 +47,9 @@ export function EscalationSection() {
 
   const fetchChat = async (phoneNumber: string) => {
     try {
-      const response = await fetch(`/get_chat_history/?phone=${phoneNumber}`);
+      const response = await fetch(`https://ba072026eae8.ngrok-free.app/get_chat_history/?phone=${phoneNumber}`, {
+        headers: { 'ngrok-skip-browser-warning': 'true' }
+      });
       const data = await response.json();
       setChatHistory(data.history || []);
     } catch (error) {
@@ -58,9 +62,12 @@ export function EscalationSection() {
     if (!selectedCandidate || !replyText.trim()) return;
 
     try {
-      await fetch('/send_admin_reply/', {
+      await fetch('https://ba072026eae8.ngrok-free.app/send_admin_reply/', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        },
         body: JSON.stringify({
           phone_number: selectedCandidate.phone_number,
           text: replyText
@@ -77,9 +84,12 @@ export function EscalationSection() {
     if (!selectedCandidate) return;
 
     try {
-      await fetch('/resume_bot/', {
+      await fetch('https://ba072026eae8.ngrok-free.app/resume_bot/', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        },
         body: JSON.stringify({ phone_number: selectedCandidate.phone_number })
       });
       alert('Bot resumed for user.');

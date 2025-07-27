@@ -21,7 +21,9 @@ export function ReportsSection() {
       // Since we don't have direct access to the template data, 
       // we'll need to make an API call or use the existing data structure
       // For now, we'll simulate the data structure
-      const response = await fetch('/get_all_candidates/');
+      const response = await fetch('https://ba072026eae8.ngrok-free.app/get_all_candidates/', {
+        headers: { 'ngrok-skip-browser-warning': 'true' }
+      });
       if (response.ok) {
         const data = await response.json();
         setCandidates(data);

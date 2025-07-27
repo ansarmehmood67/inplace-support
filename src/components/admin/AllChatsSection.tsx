@@ -23,7 +23,9 @@ export function AllChatsSection() {
 
   const loadAllChats = async () => {
     try {
-      const response = await fetch('/get_all_chats/');
+      const response = await fetch('https://ba072026eae8.ngrok-free.app/get_all_chats/', {
+        headers: { 'ngrok-skip-browser-warning': 'true' }
+      });
       const data = await response.json();
       setCandidates(data);
     } catch (error) {
@@ -43,7 +45,9 @@ export function AllChatsSection() {
 
   const fetchChat = async (phoneNumber: string) => {
     try {
-      const response = await fetch(`/get_chat_history/?phone=${phoneNumber}`);
+      const response = await fetch(`https://ba072026eae8.ngrok-free.app/get_chat_history/?phone=${phoneNumber}`, {
+        headers: { 'ngrok-skip-browser-warning': 'true' }
+      });
       const data = await response.json();
       setChatHistory(data.history || []);
     } catch (error) {
