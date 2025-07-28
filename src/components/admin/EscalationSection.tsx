@@ -73,29 +73,44 @@ export function EscalationSection() {
     setSelectedCandidate(candidate);
     setIsAtBottom(true);
     setShowScrollButton(false);
-    fetchChat(candidate.phone_number);
     
-    // Clear existing interval and set new one with longer interval
-    if (intervalId) clearInterval(intervalId);
+    // Clear existing interval first
+    if (intervalId) {
+      clearInterval(intervalId);
+      setIntervalId(null);
+    }
+    
+    // Initial fetch without loading state
+    fetchChat(candidate.phone_number, false);
+    
+    // Set up new polling interval
     const newIntervalId = setInterval(() => {
       if (!userIsScrolling) {
-        fetchChat(candidate.phone_number);
+        fetchChat(candidate.phone_number, true); // Background updates only
       }
     }, 5000);
     setIntervalId(newIntervalId);
   };
 
-  const fetchChat = async (phoneNumber: string) => {
-    setChatLoading(true);
+  const fetchChat = async (phoneNumber: string, isBackgroundUpdate = false) => {
+    // Only show loading spinner for initial loads, not background updates
+    if (!isBackgroundUpdate) {
+      setChatLoading(true);
+    }
+    
     try {
       const data = await getChatHistory(phoneNumber);
       setChatHistory(data.history || []);
     } catch (error) {
       console.error('Error fetching chat:', error);
-      toast.error('Failed to load chat history');
+      if (!isBackgroundUpdate) {
+        toast.error('Failed to load chat history');
+      }
       setChatHistory([]);
     } finally {
-      setChatLoading(false);
+      if (!isBackgroundUpdate) {
+        setChatLoading(false);
+      }
     }
   };
 
@@ -116,8 +131,8 @@ export function EscalationSection() {
       await sendAdminReply(selectedCandidate.phone_number, replyText);
       setReplyText('');
       toast.success('Reply sent successfully');
-      // Refresh chat history
-      fetchChat(selectedCandidate.phone_number);
+      // Refresh chat history without loading spinner
+      fetchChat(selectedCandidate.phone_number, true);
     } catch (error) {
       console.error('Error sending reply:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to send reply');
@@ -171,10 +186,26 @@ export function EscalationSection() {
 
   useEffect(() => {
     loadEscalations();
+    
+    // Cleanup function
     return () => {
-      if (intervalId) clearInterval(intervalId);
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+      if (scrollTimeout.current) {
+        clearTimeout(scrollTimeout.current);
+      }
     };
-  }, []);
+  }, []); // Empty dependency array
+
+  // Separate effect for interval cleanup when intervalId changes
+  useEffect(() => {
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [intervalId]);
 
   useEffect(() => {
     if (isAtBottom && !userIsScrolling && chatHistory.length > 0) {
@@ -189,12 +220,6 @@ export function EscalationSection() {
       return () => scrollElement.removeEventListener('scroll', handleScroll);
     }
   }, [handleScroll]);
-
-  useEffect(() => {
-    return () => {
-      if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
-    };
-  }, []);
 
   const getMessageIcon = (from: string) => {
     switch (from) {
