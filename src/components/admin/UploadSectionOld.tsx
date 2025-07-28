@@ -41,7 +41,7 @@ export function UploadSection() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('https://ba072026eae8.ngrok-free.app/upload/', {
+      const response = await fetch('https://ba072026eae8.ngrok-free.app/upload_excel/', {
         method: 'POST',
         headers: {
           'ngrok-skip-browser-warning': 'true',
