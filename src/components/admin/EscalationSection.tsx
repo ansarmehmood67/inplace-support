@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { User, Bot, UserCog, Send, RefreshCw, Play, AlertCircle, Wifi, WifiOff } from 'lucide-react';
+import { User, Bot, UserCog, Send, RefreshCw, Play, AlertCircle, Wifi, WifiOff, ChevronDown } from 'lucide-react';
 import { getEscalated, getChatHistory, sendAdminReply, resumeBot } from '@/lib/api';
 import { toast } from 'sonner';
 
@@ -28,7 +28,12 @@ export function EscalationSection() {
   const [sending, setSending] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [intervalId, setIntervalId] = useState<NodeJS.Timeout | null>(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [userIsScrolling, setUserIsScrolling] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const scrollTimeout = useRef<NodeJS.Timeout | null>(null);
 
   // Network status monitoring
   useEffect(() => {
@@ -66,11 +71,17 @@ export function EscalationSection() {
 
   const selectCandidate = (candidate: Candidate) => {
     setSelectedCandidate(candidate);
+    setIsAtBottom(true);
+    setShowScrollButton(false);
     fetchChat(candidate.phone_number);
     
-    // Clear existing interval and set new one
+    // Clear existing interval and set new one with longer interval
     if (intervalId) clearInterval(intervalId);
-    const newIntervalId = setInterval(() => fetchChat(candidate.phone_number), 2000);
+    const newIntervalId = setInterval(() => {
+      if (!userIsScrolling) {
+        fetchChat(candidate.phone_number);
+      }
+    }, 5000);
     setIntervalId(newIntervalId);
   };
 
@@ -134,9 +145,29 @@ export function EscalationSection() {
     }
   };
 
-  const scrollToBottom = () => {
-    scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  const scrollToBottom = useCallback(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollIntoView({ behavior: 'smooth' });
+      setIsAtBottom(true);
+      setShowScrollButton(false);
+    }
+  }, []);
+
+  const handleScroll = useCallback((event: Event) => {
+    const target = event.target as HTMLElement;
+    if (!target) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = target;
+    const isBottom = scrollHeight - scrollTop - clientHeight < 100;
+    
+    setIsAtBottom(isBottom);
+    setShowScrollButton(!isBottom && chatHistory.length > 0);
+    
+    // Mark user as scrolling
+    setUserIsScrolling(true);
+    if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
+    scrollTimeout.current = setTimeout(() => setUserIsScrolling(false), 2000);
+  }, [chatHistory.length]);
 
   useEffect(() => {
     loadEscalations();
@@ -146,8 +177,24 @@ export function EscalationSection() {
   }, []);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [chatHistory]);
+    if (isAtBottom && !userIsScrolling && chatHistory.length > 0) {
+      setTimeout(scrollToBottom, 100);
+    }
+  }, [chatHistory, isAtBottom, userIsScrolling, scrollToBottom]);
+
+  useEffect(() => {
+    const scrollElement = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+    if (scrollElement) {
+      scrollElement.addEventListener('scroll', handleScroll);
+      return () => scrollElement.removeEventListener('scroll', handleScroll);
+    }
+  }, [handleScroll]);
+
+  useEffect(() => {
+    return () => {
+      if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
+    };
+  }, []);
 
   const getMessageIcon = (from: string) => {
     switch (from) {
@@ -271,8 +318,8 @@ export function EscalationSection() {
                 {selectedCandidate ? `Chat with: ${selectedCandidate.name}` : 'Select a candidate to start chatting'}
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-0">
-              <ScrollArea className="h-[350px] p-6">
+            <CardContent className="p-0 relative">
+              <ScrollArea ref={scrollAreaRef} className="h-[350px] p-6">
                 <div className="space-y-4">
                   {chatLoading ? (
                     Array.from({ length: 3 }).map((_, i) => (
@@ -313,6 +360,18 @@ export function EscalationSection() {
                   <div ref={scrollRef} />
                 </div>
               </ScrollArea>
+
+              {/* Scroll to bottom button */}
+              {showScrollButton && (
+                <Button
+                  onClick={scrollToBottom}
+                  size="sm"
+                  className="absolute bottom-4 right-4 rounded-full shadow-lg animate-fade-in"
+                  variant="outline"
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              )}
             </CardContent>
           </Card>
 

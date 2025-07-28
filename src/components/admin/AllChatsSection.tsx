@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { MessageSquare, User, Bot, Shield, ExternalLink } from 'lucide-react';
+import { MessageSquare, User, Bot, Shield, ExternalLink, ChevronDown } from 'lucide-react';
 
 interface Candidate {
   name: string;
@@ -23,7 +23,12 @@ export function AllChatsSection() {
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [intervalId, setIntervalId] = useState<NodeJS.Timeout | null>(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [userIsScrolling, setUserIsScrolling] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const scrollTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const loadAllChats = async () => {
     try {
@@ -37,11 +42,17 @@ export function AllChatsSection() {
 
   const selectCandidate = (candidate: Candidate) => {
     setSelectedCandidate(candidate);
+    setIsAtBottom(true);
+    setShowScrollButton(false);
     fetchChat(candidate.phone_number);
     
-    // Clear existing interval and set new one
+    // Clear existing interval and set new one with longer interval
     if (intervalId) clearInterval(intervalId);
-    const newIntervalId = setInterval(() => fetchChat(candidate.phone_number), 2000);
+    const newIntervalId = setInterval(() => {
+      if (!userIsScrolling) {
+        fetchChat(candidate.phone_number);
+      }
+    }, 5000);
     setIntervalId(newIntervalId);
   };
 
@@ -55,9 +66,29 @@ export function AllChatsSection() {
     }
   };
 
-  const scrollToBottom = () => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  const scrollToBottom = useCallback(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      setIsAtBottom(true);
+      setShowScrollButton(false);
+    }
+  }, []);
+
+  const handleScroll = useCallback((event: Event) => {
+    const target = event.target as HTMLElement;
+    if (!target) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = target;
+    const isBottom = scrollHeight - scrollTop - clientHeight < 100;
+    
+    setIsAtBottom(isBottom);
+    setShowScrollButton(!isBottom && chatHistory.length > 0);
+    
+    // Mark user as scrolling
+    setUserIsScrolling(true);
+    if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
+    scrollTimeout.current = setTimeout(() => setUserIsScrolling(false), 2000);
+  }, [chatHistory.length]);
 
   useEffect(() => {
     loadAllChats();
@@ -67,8 +98,24 @@ export function AllChatsSection() {
   }, []);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [chatHistory]);
+    if (isAtBottom && !userIsScrolling && chatHistory.length > 0) {
+      setTimeout(scrollToBottom, 100);
+    }
+  }, [chatHistory, isAtBottom, userIsScrolling, scrollToBottom]);
+
+  useEffect(() => {
+    const scrollElement = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+    if (scrollElement) {
+      scrollElement.addEventListener('scroll', handleScroll);
+      return () => scrollElement.removeEventListener('scroll', handleScroll);
+    }
+  }, [handleScroll]);
+
+  useEffect(() => {
+    return () => {
+      if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
+    };
+  }, []);
 
   const getMessageIcon = (from: string) => {
     switch (from) {
@@ -161,8 +208,8 @@ export function AllChatsSection() {
               {selectedCandidate ? `💬 Chat with: ${selectedCandidate.name}` : '💬 Select a candidate to view chat'}
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-0 h-[500px]">
-            <ScrollArea className="h-full p-4">
+          <CardContent className="p-0 h-[500px] relative">
+            <ScrollArea ref={scrollAreaRef} className="h-full p-4">
               <div className="space-y-3">
                 {chatHistory.length === 0 && selectedCandidate ? (
                   <p className="text-muted-foreground text-center py-8">No chat history available</p>
@@ -187,6 +234,18 @@ export function AllChatsSection() {
                 <div ref={chatEndRef} />
               </div>
             </ScrollArea>
+            
+            {/* Scroll to bottom button */}
+            {showScrollButton && (
+              <Button
+                onClick={scrollToBottom}
+                size="sm"
+                className="absolute bottom-4 right-4 rounded-full shadow-lg animate-fade-in"
+                variant="outline"
+              >
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            )}
           </CardContent>
         </Card>
       </div>
