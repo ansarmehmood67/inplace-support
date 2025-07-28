@@ -99,14 +99,53 @@ export const uploadFile = async (file: File, onProgress?: (progress: number) => 
   const formData = new FormData();
   formData.append('file', file);
 
-  return apiRequest('/upload/', {
-    method: 'POST',
-    body: formData,
-    headers: {
-      'ngrok-skip-browser-warning': 'true',
-      // Don't set Content-Type for FormData, let browser set it with boundary
-    },
-  });
+  // Special handling for file uploads - bypass default JSON headers
+  const url = createApiUrl('/upload_excel/');
+  
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60000); // Longer timeout for file uploads
+  
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'ngrok-skip-browser-warning': 'true',
+        // Don't set Content-Type for FormData - browser sets multipart/form-data automatically
+      },
+      body: formData,
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorMessage = `Upload failed (${response.status})`;
+      
+      try {
+        const errorData = JSON.parse(errorText);
+        errorMessage = errorData.error || errorMessage;
+      } catch {
+        // If response isn't JSON, use status-based message
+        if (response.status === 413) {
+          errorMessage = 'File too large. Please select a smaller file.';
+        } else if (response.status === 400) {
+          errorMessage = 'Invalid file format. Please check your Excel file structure.';
+        }
+      }
+      
+      throw new Error(errorMessage);
+    }
+    
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('Upload timeout. Please check your connection and try again.');
+    }
+    throw error;
+  }
 };
 
 export const getAllChats = async () => {

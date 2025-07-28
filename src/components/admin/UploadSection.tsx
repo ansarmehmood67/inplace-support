@@ -3,16 +3,19 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
-import { Upload, CheckCircle, AlertCircle, FileSpreadsheet, Wifi, WifiOff } from 'lucide-react';
+import { Upload, CheckCircle, AlertCircle, FileSpreadsheet, Wifi, WifiOff, Eye } from 'lucide-react';
 import { uploadFile } from '@/lib/api';
 import { toast } from 'sonner';
+import { validateExcelFile, type ExcelValidationResult } from '@/lib/excel-utils';
 
 export function UploadSection() {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [validating, setValidating] = useState(false);
   const [progress, setProgress] = useState(0);
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [validation, setValidation] = useState<ExcelValidationResult | null>(null);
 
   // Network status monitoring
   useEffect(() => {
@@ -28,7 +31,7 @@ export function UploadSection() {
     };
   }, []);
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
     if (selectedFile) {
       if (selectedFile.size > 10 * 1024 * 1024) { // 10MB limit
@@ -49,7 +52,30 @@ export function UploadSection() {
       
       setFile(selectedFile);
       setAlert(null);
-      toast.success('File selected successfully!');
+      setValidation(null);
+      
+      // Validate Excel file structure
+      setValidating(true);
+      toast.loading('Validating file structure...', { id: 'validation-toast' });
+      
+      try {
+        const validationResult = await validateExcelFile(selectedFile);
+        setValidation(validationResult);
+        
+        if (validationResult.isValid) {
+          toast.success('File validated successfully!', { id: 'validation-toast' });
+          if (validationResult.warnings.length > 0) {
+            toast.warning(`File has ${validationResult.warnings.length} warnings. Check details below.`);
+          }
+        } else {
+          toast.error('File validation failed. Please check the errors below.', { id: 'validation-toast' });
+        }
+      } catch (error) {
+        toast.error('Failed to validate file. Please try again.', { id: 'validation-toast' });
+        setValidation({ isValid: false, errors: ['Failed to validate file'], warnings: [] });
+      } finally {
+        setValidating(false);
+      }
     }
   };
 
@@ -62,6 +88,11 @@ export function UploadSection() {
 
     if (!isOnline) {
       toast.error('No internet connection. Please check your network and try again.');
+      return;
+    }
+
+    if (validation && !validation.isValid) {
+      toast.error('Please fix the file validation errors before uploading.');
       return;
     }
 
@@ -81,7 +112,7 @@ export function UploadSection() {
     }, 300);
 
     try {
-      toast.loading('Uploading file...', { id: 'upload-toast' });
+      toast.loading('Uploading and processing file...', { id: 'upload-toast' });
       
       const response = await uploadFile(file, (progress) => {
         setProgress(progress);
@@ -93,14 +124,22 @@ export function UploadSection() {
       const data = await response.json();
       
       if (data.success) {
-        const message = `Upload successful! Added: ${data.added}, Skipped: ${data.skipped}, Failed: ${data.failed?.length || 0}`;
+        const failedList = data.failed || [];
+        const failedCount = Array.isArray(failedList) ? failedList.length : 0;
+        const message = `Upload completed! ✅ Added: ${data.added} | ⏭️ Skipped: ${data.skipped} | ❌ Failed: ${failedCount}`;
+        
         setAlert({
           type: 'success',
-          message
+          message: failedCount > 0 
+            ? `${message}\n\nFailed entries: ${failedList.join(', ')}`
+            : message
         });
+        
         toast.success(message, { id: 'upload-toast' });
+        
+        // Reset form
         setFile(null);
-        // Reset file input
+        setValidation(null);
         const fileInput = document.getElementById('file-upload') as HTMLInputElement;
         if (fileInput) fileInput.value = '';
       } else {
@@ -190,7 +229,7 @@ export function UploadSection() {
             <div className="flex justify-center">
               <Button
                 type="submit"
-                disabled={!file || uploading || !isOnline}
+                disabled={!file || uploading || !isOnline || validating || (validation && !validation.isValid)}
                 size="lg"
                 variant="premium"
                 className="px-8 py-3 rounded-xl shadow-glow hover-lift disabled:opacity-50 disabled:cursor-not-allowed"
@@ -200,6 +239,11 @@ export function UploadSection() {
                   <div className="flex items-center space-x-3">
                     <div className="w-5 h-5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
                     <span>Uploading...</span>
+                  </div>
+                ) : validating ? (
+                  <div className="flex items-center space-x-3">
+                    <div className="w-5 h-5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                    <span>Validating...</span>
                   </div>
                 ) : (
                   <div className="flex items-center space-x-2">
@@ -239,6 +283,46 @@ export function UploadSection() {
         </Card>
       )}
 
+      {/* File Validation Results */}
+      {validation && (
+        <Card className="bg-gradient-surface border-border/50 shadow-floating glass-effect animate-scale-in">
+          <CardContent className="p-6">
+            <div className="flex items-center space-x-3 mb-4">
+              <Eye className="h-5 w-5 text-primary" />
+              <h3 className="font-semibold text-foreground">File Validation Results</h3>
+            </div>
+            
+            {validation.errors.length > 0 && (
+              <div className="mb-4">
+                <h4 className="font-medium text-red-600 mb-2">❌ Errors (must be fixed):</h4>
+                <ul className="list-disc list-inside space-y-1 text-sm text-red-700">
+                  {validation.errors.map((error, index) => (
+                    <li key={index}>{error}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            
+            {validation.warnings.length > 0 && (
+              <div className="mb-4">
+                <h4 className="font-medium text-amber-600 mb-2">⚠️ Warnings (review recommended):</h4>
+                <ul className="list-disc list-inside space-y-1 text-sm text-amber-700">
+                  {validation.warnings.map((warning, index) => (
+                    <li key={index}>{warning}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            
+            {validation.isValid && (
+              <div className="text-emerald-600 font-medium">
+                ✅ File structure is valid and ready for upload!
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Alert Messages */}
       {alert && (
         <Alert className={`border-2 shadow-floating glass-effect animate-scale-in ${
@@ -254,7 +338,7 @@ export function UploadSection() {
             )}
             <AlertDescription className={`${
               alert.type === 'success' ? 'text-emerald-700' : 'text-red-700'
-            } font-medium`}>
+            } font-medium whitespace-pre-line`}>
               {alert.message}
             </AlertDescription>
           </div>
