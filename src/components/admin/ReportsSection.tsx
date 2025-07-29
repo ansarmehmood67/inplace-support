@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ExternalLink, RefreshCw, CheckCircle, XCircle, AlertTriangle, User } from 'lucide-react';
+import { ExternalLink, RefreshCw, CheckCircle, XCircle, AlertTriangle, User, MessageCircle, TrendingUp, Bot } from 'lucide-react';
+import { getCandidates, getReportStats } from '@/lib/api';
 
 interface Candidate {
   name: string;
@@ -13,34 +14,52 @@ interface Candidate {
   last_updated: string;
 }
 
+interface ReportStats {
+  summary: {
+    total_users: number;
+    total_messages: number;
+    average_conversation_length: number;
+    bot_messages: number;
+    user_messages: number;
+    admin_messages: number;
+  };
+  engagement_funnel: {
+    sent: number;
+    replied: number;
+    completed_onboarding: number;
+    escalated: number;
+  };
+  escalation_stats: {
+    total_escalated: number;
+    with_reason: number;
+  };
+}
+
 export function ReportsSection() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [reportStats, setReportStats] = useState<ReportStats | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const loadCandidates = async () => {
+  const loadData = async () => {
     setLoading(true);
     try {
-      // Since we don't have direct access to the template data, 
-      // we'll need to make an API call or use the existing data structure
-      // For now, we'll simulate the data structure
-      const response = await fetch('https://ba072026eae8.ngrok-free.app/get_all_candidates/', {
-        headers: { 'ngrok-skip-browser-warning': 'true' }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setCandidates(data);
-      }
+      const [candidatesData, statsData] = await Promise.all([
+        getCandidates(),
+        getReportStats()
+      ]);
+      setCandidates(candidatesData);
+      setReportStats(statsData);
     } catch (error) {
-      console.error('Failed to load candidates:', error);
-      // Fallback: Use mock data for demonstration
+      console.error('Failed to load data:', error);
       setCandidates([]);
+      setReportStats(null);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadCandidates();
+    loadData();
   }, []);
 
   const getStatusIcon = (status: string) => {
@@ -83,14 +102,14 @@ export function ReportsSection() {
 
   return (
     <div className="space-y-6">
-      {/* Stats Cards */}
+      {/* Summary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="bg-gradient-secondary border-border">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Candidates</p>
-                <p className="text-2xl font-bold text-foreground">{candidates.length}</p>
+                <p className="text-sm text-muted-foreground">Total Users</p>
+                <p className="text-2xl font-bold text-foreground">{reportStats?.summary.total_users || 0}</p>
               </div>
               <User className="h-8 w-8 text-primary" />
             </div>
@@ -101,12 +120,10 @@ export function ReportsSection() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Escalated</p>
-                <p className="text-2xl font-bold text-warning">
-                  {candidates.filter(c => c.status?.toLowerCase() === 'escalated').length}
-                </p>
+                <p className="text-sm text-muted-foreground">Total Messages</p>
+                <p className="text-2xl font-bold text-info">{reportStats?.summary.total_messages || 0}</p>
               </div>
-              <AlertTriangle className="h-8 w-8 text-warning" />
+              <MessageCircle className="h-8 w-8 text-info" />
             </div>
           </CardContent>
         </Card>
@@ -115,10 +132,59 @@ export function ReportsSection() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Completed</p>
-                <p className="text-2xl font-bold text-success">
-                  {candidates.filter(c => c.status?.toLowerCase() === 'completed').length}
-                </p>
+                <p className="text-sm text-muted-foreground">Avg Conversation</p>
+                <p className="text-2xl font-bold text-success">{reportStats?.summary.average_conversation_length || 0}</p>
+              </div>
+              <TrendingUp className="h-8 w-8 text-success" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-secondary border-border">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Bot Messages</p>
+                <p className="text-2xl font-bold text-accent">{reportStats?.summary.bot_messages || 0}</p>
+              </div>
+              <Bot className="h-8 w-8 text-accent" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Engagement Funnel */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="bg-gradient-secondary border-border">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Sent</p>
+                <p className="text-2xl font-bold text-foreground">{reportStats?.engagement_funnel.sent || 0}</p>
+              </div>
+              <ExternalLink className="h-8 w-8 text-primary" />
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-gradient-secondary border-border">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Replied</p>
+                <p className="text-2xl font-bold text-info">{reportStats?.engagement_funnel.replied || 0}</p>
+              </div>
+              <MessageCircle className="h-8 w-8 text-info" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-secondary border-border">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Completed Onboarding</p>
+                <p className="text-2xl font-bold text-success">{reportStats?.engagement_funnel.completed_onboarding || 0}</p>
               </div>
               <CheckCircle className="h-8 w-8 text-success" />
             </div>
@@ -129,12 +195,10 @@ export function ReportsSection() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Active</p>
-                <p className="text-2xl font-bold text-info">
-                  {candidates.filter(c => c.status?.toLowerCase() === 'active').length}
-                </p>
+                <p className="text-sm text-muted-foreground">Escalated</p>
+                <p className="text-2xl font-bold text-warning">{reportStats?.engagement_funnel.escalated || 0}</p>
               </div>
-              <User className="h-8 w-8 text-info" />
+              <AlertTriangle className="h-8 w-8 text-warning" />
             </div>
           </CardContent>
         </Card>
@@ -148,7 +212,7 @@ export function ReportsSection() {
             <Button
               variant="outline"
               size="sm"
-              onClick={loadCandidates}
+              onClick={loadData}
               disabled={loading}
             >
               {loading ? (

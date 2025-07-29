@@ -1,5 +1,5 @@
 // Backend API configuration
-export const API_BASE_URL = 'https://ba072026eae8.ngrok-free.app';
+export const API_BASE_URL = 'https://chatbot-0m58.onrender.com';
 
 // Helper function to create API URLs
 export const createApiUrl = (endpoint: string) => {
@@ -181,5 +181,10 @@ export const resumeBot = async (phone_number: string) => {
     method: 'POST',
     body: JSON.stringify({ phone_number }),
   });
+  return response.json();
+};
+
+export const getReportStats = async () => {
+  const response = await apiRequest('/get_report_stats/');
   return response.json();
 };
