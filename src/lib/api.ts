@@ -1,5 +1,5 @@
 // Backend API configuration
-export const API_BASE_URL = 'https://ba072026eae8.ngrok-free.app';
+export const API_BASE_URL = 'https://chatbot-0m58.onrender.com/';
 
 // Helper function to create API URLs
 export const createApiUrl = (endpoint: string) => {
